@@ -597,67 +597,146 @@ function formatTime(seconds) {
     return `${m}m ${s}s`;
 }
 
-// Report Logic
-function openReport() {
-    const modal = document.getElementById('report-modal');
-    
-    // Generate Report HTML
+function getTaskReportStatus(task) {
+    const isRunning = !!timers[task.id];
+
+    if (task.status === 'done') {
+        return { label: 'Done', color: '#34c759', icon: '✓' };
+    }
+
+    if (task.status === 'in-progress' || isRunning) {
+        return { label: 'In Progress', color: '#ffcc00', icon: '▶' };
+    }
+
+    if (task.status === 'cancelled' || task.status === 'overdue') {
+        return { label: 'Not Completed', color: '#ff3b30', icon: '✕' };
+    }
+
+    return { label: 'Pending', color: '#999', icon: '•' };
+}
+
+function buildReportData() {
     let totalTasks = 0;
     let completedTasks = 0;
     let totalTime = 0;
-    let listHtml = '';
+    const sections = [];
 
-    appData.projects.forEach(p => {
-        if (p.type === 'note') {
-             listHtml += `<div style="margin-bottom: 20px; padding: 15px; background: rgba(255,255,255,0.5); border-radius: 12px;">
-                ${p.title ? `<div style="font-weight:bold; margin-bottom:8px; color:#444; font-size: 1.2rem;">${p.title}</div>` : ''}
-                <div style="white-space: pre-wrap; color: #333; font-size: 1rem; line-height: 1.5;">${p.content || ''}</div>
-            </div>`;
+    appData.projects.forEach(project => {
+        if (project.type === 'note') {
+            sections.push({
+                type: 'note',
+                title: project.title || 'Note',
+                content: project.content || ''
+            });
             return;
         }
 
-        if (p.tasks.length === 0) return;
-        
-        listHtml += `<div style="margin-bottom: 15px;">
-            <div style="font-weight:bold; margin-bottom:5px; color:#444; font-size: 1.3rem;">${p.title || 'Untitled Project'}</div>`;
-        
-        p.tasks.forEach(t => {
-            totalTasks++;
-            if (t.status === 'done') completedTasks++;
-            totalTime += t.timeSpent;
-            
-            // Colors: Done=Green, In-Progress=Yellow, Cancelled/Overdue=Red, Pending=Grey
-            const isRunning = !!timers[t.id];
-            let color = '#999'; // Default pending
-            let icon = '•';
+        if (!project.tasks.length) return;
 
-            if (t.status === 'done') {
-                color = '#34c759'; // Green
-                icon = '✓';
-            } else if (t.status === 'in-progress' || isRunning) {
-                color = '#ffcc00'; // Yellow
-                icon = '▶';
-            } else if (t.status === 'cancelled' || t.status === 'overdue') {
-                color = '#ff3b30'; // Red
-                icon = '✕';
-            }
-            
-            listHtml += `
-                <div style="display:flex; align-items: flex-start; font-size:1.1rem; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
-                    <span style="color:${color}; margin-right:8px; font-weight:bold; min-width: 15px;">${icon}</span>
-                    <span style="flex-grow:1; color: #333; margin-right: 10px; word-break: break-word; text-align: left; ${t.status === 'cancelled' ? 'text-decoration:line-through; opacity:0.6;' : ''}">${t.title}</span>
-                    <span style="font-family:monospace; color:#666; white-space: nowrap; min-width: 70px; text-align: right;">${formatTime(t.timeSpent)}</span>
-                </div>
-            `;
+        const tasks = project.tasks.map(task => {
+            totalTasks++;
+            if (task.status === 'done') completedTasks++;
+            totalTime += task.timeSpent;
+
+            return {
+                title: task.title || 'Untitled Task',
+                timeSpent: task.timeSpent,
+                isCancelled: task.status === 'cancelled',
+                ...getTaskReportStatus(task)
+            };
         });
-        
-        listHtml += `</div>`;
+
+        sections.push({
+            type: 'project',
+            title: project.title || 'Untitled Project',
+            tasks
+        });
     });
 
-    document.getElementById('rep-date').innerText = appData.date;
-    document.getElementById('rep-completed-total').innerText = `${completedTasks}/${totalTasks}`;
-    document.getElementById('rep-time').innerText = formatTime(totalTime);
-    document.getElementById('rep-list').innerHTML = listHtml;
+    return {
+        date: appData.date,
+        totalTasks,
+        completedTasks,
+        totalTime,
+        sections
+    };
+}
+
+function renderReportHtml(reportData) {
+    return reportData.sections.map(section => {
+        if (section.type === 'note') {
+            return `<div style="margin-bottom: 20px; padding: 15px; background: rgba(255,255,255,0.5); border-radius: 12px;">
+                ${section.title ? `<div style="font-weight:bold; margin-bottom:8px; color:#444; font-size: 1.2rem;">${section.title}</div>` : ''}
+                <div style="white-space: pre-wrap; color: #333; font-size: 1rem; line-height: 1.5;">${section.content}</div>
+            </div>`;
+        }
+
+        const tasksHtml = section.tasks.map(task => `
+            <div style="display:flex; align-items: flex-start; font-size:1.1rem; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                <span style="color:${task.color}; margin-right:8px; font-weight:bold; min-width: 15px;">${task.icon}</span>
+                <span style="flex-grow:1; color: #333; margin-right: 10px; word-break: break-word; text-align: left; ${task.isCancelled ? 'text-decoration:line-through; opacity:0.6;' : ''}">${task.title}</span>
+                <span style="font-family:monospace; color:#666; white-space: nowrap; min-width: 70px; text-align: right;">${formatTime(task.timeSpent)}</span>
+            </div>
+        `).join('');
+
+        return `<div style="margin-bottom: 15px;">
+            <div style="font-weight:bold; margin-bottom:5px; color:#444; font-size: 1.3rem;">${section.title}</div>
+            ${tasksHtml}
+        </div>`;
+    }).join('');
+}
+
+function buildReportMarkdown(reportData) {
+    const lines = [
+        '# Daily Report',
+        '',
+        `**Date:** ${reportData.date}`,
+        `**Completed:** ${reportData.completedTasks}/${reportData.totalTasks}`,
+        `**Focus Time:** ${formatTime(reportData.totalTime)}`
+    ];
+
+    reportData.sections.forEach(section => {
+        lines.push('');
+
+        if (section.type === 'note') {
+            lines.push(`## ${section.title}`);
+            if (section.content.trim()) {
+                lines.push('');
+                lines.push(section.content.trim());
+            }
+            return;
+        }
+
+        lines.push(`## ${section.title}`);
+        lines.push('');
+
+        section.tasks.forEach(task => {
+            let marker = '[ ]';
+
+            if (task.label === 'Done') {
+                marker = '[🟢]';
+            } else if (task.label === 'Not Completed') {
+                marker = '[🔴]';
+            } else if (task.label === 'In Progress') {
+                marker = '[🟡]';
+            }
+
+            lines.push(`${marker} ${task.title}             (${task.label}, ${formatTime(task.timeSpent)})`);
+        });
+    });
+
+    return lines.join('\n');
+}
+
+// Report Logic
+function openReport() {
+    const modal = document.getElementById('report-modal');
+    const reportData = buildReportData();
+
+    document.getElementById('rep-date').innerText = reportData.date;
+    document.getElementById('rep-completed-total').innerText = `${reportData.completedTasks}/${reportData.totalTasks}`;
+    document.getElementById('rep-time').innerText = formatTime(reportData.totalTime);
+    document.getElementById('rep-list').innerHTML = renderReportHtml(reportData);
 
     modal.classList.add('active');
 }
@@ -712,4 +791,15 @@ function copyReportImage() {
     } else {
         alert("Library loading... please wait or check internet connection.");
     }
+}
+
+function copyReportText() {
+    const markdown = buildReportMarkdown(buildReportData());
+
+    navigator.clipboard.writeText(markdown).then(() => {
+        alert('Formatted markdown copied to clipboard!');
+    }).catch(err => {
+        console.error(err);
+        alert('Failed to copy text. Browser might not support it.');
+    });
 }
