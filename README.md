@@ -4,6 +4,6 @@ A simple, locally-hosted todo tracker designed for tracking daily progress. It a
 
 The architecture is intentionally simple, storing all data in your browser's LocalStorage with no backend required. This means you can clone the repository and open `index.html` directly in your browser to get started.
 
-This tool was originally created for my journal on the Study Together Discord server (https://discord.gg/study).
+
 
 You can view the live version at: https://basilbenny1002.github.io/todo-tracker/
